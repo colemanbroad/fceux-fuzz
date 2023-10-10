@@ -29,3 +29,9 @@ or does it just make the whole grid artificially smaller and so we just "die" so
 - How could we automatically extract the score from memory for an arbitrary game?
 - What if we could specify the pixels that correspond to the score?
 How could 
+
+- Detect infinite loops?
+- Prove that loops are impossible?
+- Calculate probability of loops given n_columns, n_enemy_types, etc..
+- _Learn tactics_. Q learning in state+action space that was (toprow + falling + action) = (5^4 * 6^4 * 3) = 2.4 mil.
+Then we have 10frames/sec * 1hr = 36k observations. So the space is still sparse, but we should be able to model it and reduce it.
