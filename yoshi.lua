@@ -71,23 +71,26 @@ function getscore()
   tens =  memory.readbyte(0x05F2)
   ones =  memory.readbyte(0x05F3)
   score = 1000 * thousands + 100 * hundreds + 10 * tens + 1 * ones
-
-  position = memory.readbyte(0x0440)
-  n_eggs = memory.readbyte(0x0532)
-
-  gc = get_grid_count()
-  space_score = 10 * (7*4 - gc)^0.5
-
-  grid_height = get_grid_height()
-  if (grid_height < 2) then 
-    print('score 0')
-    return 0 
-  end 
-  -- space_score = -300 end
-  -- if (gc > 20) then space_score = -10 end
-
-  return 100 * n_eggs + score + space_score
+  return score
 end
+
+-- function comment()
+--   position = memory.readbyte(0x0440)
+--   n_eggs = memory.readbyte(0x0532)
+
+--   gc = get_grid_count()
+--   space_score = 10 * (7*4 - gc)^0.5
+
+--   grid_height = get_grid_height()
+--   if (grid_height < 3) then 
+--     print('score 0')
+--     return 0 
+--   end 
+--   -- space_score = -300 end
+--   -- if (gc > 20) then space_score = -10 end
+
+--   return 100 * n_eggs + score + space_score
+-- end
 
 function arrayEqual(a1, a2)
   -- Check length, or else the loop isn't valid.
@@ -104,7 +107,6 @@ function arrayEqual(a1, a2)
   
   return true
 end
-
 
 function make_press(button_array)
   local button =  { 
@@ -162,11 +164,11 @@ end
 -- sample a new state and refresh 
 function newstate()
   g_idx = math.random(Nstates)
-  emu.print("g_idx = ", g_idx)
   restart_count = 0
   savestate.load(gstates[g_idx][1])
   score_current = gstates[g_idx][2]
   global_count = gstates[g_idx][3]
+  emu.print("Reload game height", g_idx - 1, "with score", score_current)
 end
 
 
@@ -181,7 +183,7 @@ gs = {}
 
 -- tracks gamestate, score and global count
 -- initialize all states to same root
-Nstates = 1
+Nstates = 8
 gstates = {}
 for i=1,Nstates do
   gstates[i] = {savestate.object(), 0, 0}
@@ -208,11 +210,14 @@ restart_count = restart_count + 1
 
 score = getscore()
 if (score_current < score) then
-  emu.print("score = ", score)
+  height = get_grid_height()
   score_current = score
-  savestate.save(gstates[g_idx][1])
-  gstates[g_idx][2] = score
-  gstates[g_idx][3] = global_count
+  if (score_current > gstates[height + 1][2]) then
+    emu.print("New best score", score, " for height", height)
+    savestate.save(gstates[height + 1][1])
+    gstates[height + 1][2] = score
+    gstates[height + 1][3] = global_count
+  end
 end
 
 
@@ -239,7 +244,6 @@ end
 -- The upcoming eventually falls and is replaced by the next upcoming before it hits the toprow.
 -- We don't have a way of observing the falling blocks, but we can remember who's falling by remembering
 -- the previous toprow. 
-
 
 for i=1,4 do
   if (falling[i] == toprow[i]) then 

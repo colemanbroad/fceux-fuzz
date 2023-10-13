@@ -19,10 +19,9 @@ count on having a single key numerical metric that allows us to evaluate a state
 Reducing this from a number to a (partial?) order makes this easier. 
 
 
-
 Does a hard cutoff on the number of used grid squares prevent us from dying?
 or does it just make the whole grid artificially smaller and so we just "die" sooner.
-(die means get stuck in infinite loop).
+(Die means get stuck in infinite loop).
 
 - What fraction of the games end in a loop vs continue on past 100 eggs?
 - What does the distribution of scores look like? Is it 1/x or exponential?
@@ -35,3 +34,10 @@ How could
 - Calculate probability of loops given n_columns, n_enemy_types, etc..
 - _Learn tactics_. Q learning in state+action space that was (toprow + falling + action) = (5^4 * 6^4 * 3) = 2.4 mil.
 Then we have 10frames/sec * 1hr = 36k observations. So the space is still sparse, but we should be able to model it and reduce it.
+We can reduce the environment space by shrinking the `falling` list and the `toprow` list. We can 
+
+A CNN that looked at game pixels could learn to associate.
+
+----------------------------------------------------------------
+
+
