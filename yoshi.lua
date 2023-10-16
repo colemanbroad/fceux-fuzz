@@ -66,30 +66,33 @@ function getupcoming()
 end
 
 function getscore()
+  hun_thousands =  memory.readbyte(0x05E8)
+  ten_thousands =  memory.readbyte(0x05E9)
   thousands =  memory.readbyte(0x05F0)
   hundreds =  memory.readbyte(0x05F1)
   tens =  memory.readbyte(0x05F2)
   ones =  memory.readbyte(0x05F3)
-  score = 1000 * thousands + 100 * hundreds + 10 * tens + 1 * ones
+  score = 100000 * hun_thousands + 10000 * ten_thousands + 1000 * thousands + 100 * hundreds + 10 * tens + 1 * ones
   return score
 end
 
--- function comment()
+-- function old_score_extras()
+--   score = getscore()
 --   position = memory.readbyte(0x0440)
 --   n_eggs = memory.readbyte(0x0532)
 
 --   gc = get_grid_count()
---   space_score = 10 * (7*4 - gc)^0.5
+--   grid_count_score = 10 * (7*4 - gc)^0.5
 
 --   grid_height = get_grid_height()
 --   if (grid_height < 3) then 
 --     print('score 0')
 --     return 0 
 --   end 
---   -- space_score = -300 end
---   -- if (gc > 20) then space_score = -10 end
+--   -- grid_count_score = -300 end
+--   -- if (gc > 20) then grid_count_score = -10 end
 
---   return 100 * n_eggs + score + space_score
+--   return 100 * n_eggs + score + grid_count_score
 -- end
 
 function arrayEqual(a1, a2)
@@ -150,7 +153,6 @@ end
 
 
 function dead()
-
   d = memory.readbyte(0x01E0)
   -- print("dead", d)
   if (d == 174 or d == 188) then return true end
@@ -197,12 +199,6 @@ falling = {0,0,0,0}
 in_waiting = {0,0,0,0}
 upcoming = {0,0,0,0}
 
--- next = getupcoming()
--- if (not arrayEqual(next_current, next)) then
---   -- emu.print(next, next_current)
---   next_current = next
--- end
-
 while (true) do
 
 global_count = global_count + 1
@@ -235,7 +231,7 @@ if (not arrayEqual(upcoming, getupcoming())) then
   falling = in_waiting
   in_waiting = upcoming
   upcoming = getupcoming()
-  print(toprow, falling, in_waiting, upcoming)
+  -- print(toprow, falling, in_waiting, upcoming)
 end
 
 -- if (not arrayEqual(upcoming_falling, upcoming)) then 
@@ -243,13 +239,15 @@ end
 
 -- The upcoming eventually falls and is replaced by the next upcoming before it hits the toprow.
 -- We don't have a way of observing the falling blocks, but we can remember who's falling by remembering
--- the previous toprow. 
+-- the previous toprow.
 
 for i=1,4 do
-  if (falling[i] == toprow[i]) then 
+  c1 = falling[i] == toprow[i]
+  c2 = falling[i] == 5 and toprow[i] == 6
+  c3 = falling[i] == 5 and toprow[i] == 5
+  if ((c1 and not c3) or c2) then 
       press = make_press({0,1,0,0,0,0,0,0}) 
-      -- countdown = 15
-    end -- just down
+  end -- just down
 end
 
 joypad.set(1, press)
