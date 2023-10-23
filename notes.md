@@ -110,7 +110,120 @@ both of them. This
 # Policy learning
 
 
+Only need to think about a non-zero action if there is a new upcoming?
+No, this is insufficient, because _a full permutation of columns may require multiple frames to execute._
 
+1. allow for _actions that take place over multiple frames_. 
+    The max length action is << time between `upcoming` so the bounds shouldn't be a problem.
+2. Enforce small L,R,Swap action space and single-frame timesteps.
+    The state space in both cases is `top x falling`
+
+----------------------------------------------------------------
+
+Keep track of the recent history so we can backprop the reward to prev value.
+The value function will not make sense if we only keep track of the `top` and `falling` block states.
+
+- We don't need any form of long-term memory to do well in yoshi. 
+    Just like chess, the entire game state is visible at all times.  
+    This means we can learn a policy that ignores or heavily discounts future reward in favor of immediate returns.[^1]
+
+- Further, the actions that we take in yoshi (permuting columns) has only a very minimal effect on the next state, 
+    which is primarily determined by the random number generator picking new `top` row blocks. So there isn't that
+    much we actually _can_ learn about how action affect the future.
+
+
+[^1]: With the caveat that it depends on our definition of "future". If every single frame is counted, then we need 
+    to take action many frames before the blocks connect and the reward is received. However, if we coarse-grain time
+    to only advance when a new `top` row appears then the the action that we take can be in response to a new top row
+    appearing, which  
+
+
+The rough order of operations involved in a single coarse-grained timestep which may take 8s and 8*60 frames.
+Maybe we could scale up our memory by having a buffer with n memory slots, where slot n is cleared after 2^n frames.
+
+1. new `top` appears in memory
+1. old `top` moves somewhere unknown and begins to fall
+2. our `action` aligns columns with falling blocks
+3. falling blocks are destined for certain exposed tops because they're too deep
+4. blocks hit the exposed tops
+4. exploding egg animation runs
+5. points are registered 
+5. eggs are registered 
+6. blocks are redrawn with black borders 
+6. falling blocks are added to the grid and become new exposed tops
+
+
+policy returns an optimal decision for the given current state
+by simply looking up for action in state->[]action for reward in (state,action) -> reward
+when _off policy_ we make a choice at random / try the smallest untested action.
+initially we don't do any clever interpolation or try to break the action down by sub-actions
+but we could do that too... add columns for sub-action steps and for sub-state pieces. This additional
+granularity gives us better statistics, which we can then use. If some of the pieces live in an ordered or
+continuous space we could even interpolate between them! If the newstate and reward is related to the action
+by a continuous function we can backprop it!) I'm imagining that we want to break up the state into the 
+different yoshi. 
+
+The "action" that we learn to make doesn't necessarily just have to be learning button presses based
+on grid states. it could be learning _any code upstream of button presses_ 
+
+# How long should it take?
+
+If we take one action and observer one reward per second...
+And our state space is `top x falling x actions = 6^4 x 6^4 x 3 = 5_038_848` it will take an hour 
+before the state space is 1/1000 of the way full. This will not do...
+- 6^4 x 6^4 = 1_679_616 state space
+
+If our state space is `three pairs of two grid tops and two grid bottoms and 3^3 actions` this doesn't give you
+enough info to take a good action.
+- two pairs of grid tops and bottoms and two pairs of (binary) actions. either do nothing or permute.
+- a 4x4 binary matrix showing relationship between `top` and `falling` blocks (0 = not equal, 1 = equal). 
+    - 2^16 = 64k state space (much better!)
+    - if we say blank != blank then there are only very few matrices ever seen.
+    - remember it's only the distribution over the state space that matters (entropy of that dist), not the
+        absolute size of the space.
+    - also think that usually there will be zero 1's in M. or a single 1 in M, which already allows us to 
+        get some points! we should learn this very quickly!
+    - we can then extend the action space to X,R,X,R,X,L,X,L,X where `X` is an optional swap and L/R are left/right movements.
+        This gives us access to all 4! permutations of columns using a single pass? No it doesn't. We can't do a full iversion of the order, for instance. ABCD -> No it doesn't. We can't do a full iversion of the order, for instance. ABCD -> DCBA.
+- 
+
+
+# A datastructure for Q learning
+
+Keep a list of tuples 
+
+```python
+# a list of tuples database. add a row every frame. if we observe any reward, update the values for the previous rows where time > current time - 60 
+history : [(state, action, reward, time)]
+# update this whenever a row is updated we have to update the corresponding value of the (state,action) pair
+Q : (state,action) -> value
+# update this whenever a (state,action) pair's value is updated.
+policy : state -> [(action, value), (action, value), ... ] 
+```
+
+On every iteration we 
+1. choose an action based on sampling a weighted random action from policy.
+2. perform the action
+3. observe the reward
+4. add previous state, action, reward, time to history
+5. for every (state,action) pair in recent history, update it's value in Q
+6. for every state with an updated value in Q, update it's value in policy
+
+Here's a simplified version that combines Q and policy:
+
+
+```python
+# a list of tuples database. add a row every frame. if we observe any reward, update the values for the previous rows where time > current time - 60 
+history : [(state, action, reward, time)]
+# update this whenever a row is updated we have to update the corresponding value of the (state,action) pair
+Q : state -> action -> value
+```
+
+1. choose an action based on sampling a weighted random action from Q
+2. perform the action
+3. observe the reward
+4. add previous state, action, reward, time to history
+5. for every state action pair in recent history, update value in Q
 
 
 

@@ -30,6 +30,7 @@ function get_grid_toprow()
   toprow = {}
   for column=0,3 do
     continue = true
+    toprow[column + 1] = 0
     for row=0,7 do
         gridval = memory.readbyte(0x0490 + 9*column + row)
         if (gridval ~= 0 and continue) then 
@@ -72,8 +73,8 @@ function getscore()
   hundreds =  memory.readbyte(0x05F1)
   tens =  memory.readbyte(0x05F2)
   ones =  memory.readbyte(0x05F3)
-  score = 100000 * hun_thousands + 10000 * ten_thousands + 1000 * thousands + 100 * hundreds + 10 * tens + 1 * ones
-  return score
+  myscore = 100000 * hun_thousands + 10000 * ten_thousands + 1000 * thousands + 100 * hundreds + 10 * tens + 1 * ones
+  return myscore
 end
 
 -- function old_score_extras()
@@ -139,10 +140,10 @@ function randompress()
   local x = lra[math.random(3)]
   local bs = {0,1,0,0,0,0,0,0}
   bs[x] = 1
-  return make_press(bs)
+  return bs
 end
 
-local function has_value (tab, val)
+local function has_value(tab, val)
     for index, value in ipairs(tab) do
         if value == val then
             return true
@@ -166,22 +167,109 @@ end
 -- sample a new state and refresh 
 function newstate()
   g_idx = math.random(Nstates)
-  restart_count = 0
+  -- restart_count = 0
   savestate.load(gstates[g_idx][1])
   score_current = gstates[g_idx][2]
+  score = score_current
   global_count = gstates[g_idx][3]
   emu.print("Reload game height", g_idx - 1, "with score", score_current)
 end
 
 
+function getPressFromQ(state) 
 
-score_current = 0;
-next_current = {0,0,0,0}
-global_count = 0
-restart_count = 0
+  local falling = falling[1]
+  local toprow = falling[2]
+  
+  -- default random
+  press = randompress()
 
-gs = {}
+  for i=1,4 do
+    c1 = falling[i] == toprow[i]
+    c2 = falling[i] == 5 and toprow[i] == 6
+    c3 = falling[i] == 5 and toprow[i] == 5 -- both shell bottoms
+    if ((c1 and not c3) or c2) then 
+        press = {0,1,0,0,0,0,0,0}
+    end -- just down
+  end
 
+  return press
+
+end
+
+function maxQAction(Q, state)
+
+  -- emu.print("Q is this! \n", Q)
+
+  actions = Q[state] or {}
+  if not actions=={} then
+    emu.print("actions exist!", actions)
+  end
+  -- press = {0,0,0,0,0,0,0,0}
+  press = randompress()
+  max_val = 0
+  for a,v in pairs(actions) do
+      -- a,v = unpack(av)
+      if v > max_val then 
+        temp_val = v
+        press = a
+        emu.print("taking action! ", press)
+      end
+  end
+  return press
+end
+
+function updateQ(Q)
+  N = 6
+
+  history[(global_count % N) + 1] = {state, press, reward, global_count}
+  -- if reward > 0 then 
+  --   emu.print("update history ", (global_count % N) + 1, state, press, reward, global_count)
+  -- end
+
+  idx = 0
+  -- if reward>0 then emu.print("WArdDYU > 0! = ", reward) end
+
+  while idx < N do
+    h_idx = (global_count - idx) % N + 1
+    sarc = history[h_idx] or nil
+    idx = idx + 1
+
+    if not (sarc == nil) then
+      s,a,r,c = unpack(sarc)
+      actions = Q[s] or {}
+      -- emu.print("M1 actions=", actions)
+      v = actions[a] or 0
+      -- if reward > 0 then 
+      --   emu.print("update value:", s, a, " is now ... ", v + reward) 
+      -- end
+      actions[a] = v + reward
+      -- emu.print("M1 actions=", actions)
+      Q[s] = actions
+      -- emu.print("M1 actions Q[s]=", Q[s])
+    end
+  end
+
+end
+
+function updateStrategy()
+  height = get_grid_height()
+  gs = gstates[height + 1]
+  if (score_current > gs[2]) then
+    emu.print("New best score", score_current, " for height", height)
+    savestate.save(gs[1])
+    gs[2] = score_current
+    gs[3] = global_count
+    gstates[height + 1] = gs
+  end
+end
+
+-- Initialize the global vars
+-- Initialize the global vars
+-- Initialize the global vars
+-- Initialize the global vars
+-- Initialize the global vars
+-- Initialize the global vars
 
 -- tracks gamestate, score and global count
 -- initialize all states to same root
@@ -193,64 +281,74 @@ for i=1,Nstates do
 end
 
 g_idx = 1
-emu.print("g_idx = ", g_idx)
+-- emu.print("g_idx = ", g_idx)
+
+history = {}
 
 falling = {0,0,0,0}
 in_waiting = {0,0,0,0}
 upcoming = {0,0,0,0}
+score_current = 0;
+global_count = 0
+-- restart_count = 0
 
-while (true) do
+Q = {}
 
-global_count = global_count + 1
-restart_count = restart_count + 1
+-- Begin main loop
+-- Begin main loop
+-- Begin main loop
+-- Begin main loop
+-- Begin main loop
+-- Begin main loop
 
-score = getscore()
-if (score_current < score) then
-  height = get_grid_height()
-  score_current = score
-  if (score_current > gstates[height + 1][2]) then
-    emu.print("New best score", score, " for height", height)
-    savestate.save(gstates[height + 1][1])
-    gstates[height + 1][2] = score
-    gstates[height + 1][3] = global_count
-  end
-end
+while (true) do -- mainloop
 
 
 if (dead()) then
   emu.print("GAMEOVER")
   newstate()
-  -- restart_count = 1001
+  emu.print(reward, score, score_current)
 end
-
-
-press = randompress()
-
-toprow = get_grid_toprow()
-if (not arrayEqual(upcoming, getupcoming())) then
-  falling = in_waiting
-  in_waiting = upcoming
-  upcoming = getupcoming()
-  -- print(toprow, falling, in_waiting, upcoming)
-end
-
--- if (not arrayEqual(upcoming_falling, upcoming)) then 
--- end
 
 -- The upcoming eventually falls and is replaced by the next upcoming before it hits the toprow.
 -- We don't have a way of observing the falling blocks, but we can remember who's falling by remembering
 -- the previous toprow.
+if (arrayEqual(upcoming, getupcoming())) then
+  press = {0,1,0,0,0,0,0,0}
+  joypad.set(1, make_press(press))
+  emu.frameadvance()
+else -- doeverything
 
-for i=1,4 do
-  c1 = falling[i] == toprow[i]
-  c2 = falling[i] == 5 and toprow[i] == 6
-  c3 = falling[i] == 5 and toprow[i] == 5
-  if ((c1 and not c3) or c2) then 
-      press = make_press({0,1,0,0,0,0,0,0}) 
-  end -- just down
-end
+global_count = global_count + 1
 
-joypad.set(1, press)
+falling = in_waiting
+in_waiting = upcoming
+upcoming = getupcoming()
+toprow = get_grid_toprow()
+-- print(toprow, falling, in_waiting, upcoming)
+
+-- pick action from Q
+state = {falling, toprow}
+press = maxQAction(Q, state)
+joypad.set(1, make_press(press))
 emu.frameadvance()
 
-end;
+-- observe score/reward and update values
+
+score = getscore()
+-- strategy 
+reward = 0
+if (score_current < score) then
+  reward = score - score_current
+  emu.print(reward, score, score_current)
+  score_current = score
+  updateStrategy()
+end
+  
+-- ring buffer! only keep track of the 60 most recent
+updateQ(Q)
+
+end -- doeverything
+end; -- mainloop
+
+
