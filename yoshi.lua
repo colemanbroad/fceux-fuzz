@@ -143,6 +143,17 @@ function randompress()
   return bs
 end
 
+function random_seq(n)
+  -- local bs = {0,0,0,0,0}
+  local bs = {}
+  for i=1,n do
+    local v = 0
+    if math.random(10) < 5 then v = 1 end
+    bs[i] = v
+  end
+  return bs
+end
+
 local function has_value(tab, val)
     for index, value in ipairs(tab) do
         if value == val then
@@ -176,7 +187,15 @@ function newstate()
 end
 
 
+function press_from_bit(updown)
+  local p = {0,0,0,0,0,0,0,0}
+  if updown == 1 then p[5] = 1 end
+  return p
+end
+  
+
 function getPressFromQ(state) 
+
 
   local falling = falling[1]
   local toprow = falling[2]
@@ -201,55 +220,82 @@ function maxQAction(Q, state)
 
   -- emu.print("Q is this! \n", Q)
 
-  actions = Q[state] or {}
+  actions = Q[l2s(state)] or {}
   if not actions=={} then
     emu.print("actions exist!", actions)
   end
-  -- press = {0,0,0,0,0,0,0,0}
-  press = randompress()
+
+  -- press = random_seq(5)
+  -- ACTION SPACE
+  press = random_seq(2)
+
+  if l2s(state)=="0000000000000000" then return press end
+
   max_val = 0
-  for a,v in pairs(actions) do
-      -- a,v = unpack(av)
+  for a,vc in pairs(actions) do
+      v,c = unpack(vc)
       if v > max_val then 
         temp_val = v
-        press = a
-        emu.print("taking action! ", press)
+        press = s2l(a)
+        emu.print("taking action! ", a, press)
       end
   end
   return press
 end
 
-function updateQ(Q)
-  N = 6
 
-  history[(global_count % N) + 1] = {state, press, reward, global_count}
-  -- if reward > 0 then 
-  --   emu.print("update history ", (global_count % N) + 1, state, press, reward, global_count)
-  -- end
 
-  idx = 0
-  -- if reward>0 then emu.print("WArdDYU > 0! = ", reward) end
-
-  while idx < N do
-    h_idx = (global_count - idx) % N + 1
-    sarc = history[h_idx] or nil
-    idx = idx + 1
-
-    if not (sarc == nil) then
-      s,a,r,c = unpack(sarc)
-      actions = Q[s] or {}
-      -- emu.print("M1 actions=", actions)
-      v = actions[a] or 0
-      -- if reward > 0 then 
-      --   emu.print("update value:", s, a, " is now ... ", v + reward) 
-      -- end
-      actions[a] = v + reward
-      -- emu.print("M1 actions=", actions)
-      Q[s] = actions
-      -- emu.print("M1 actions Q[s]=", Q[s])
-    end
+function l2s(lizt)
+  local s = ""
+  for i, li in ipairs(lizt) do
+    s = s .. tostring(li)
   end
+  return s
+end
 
+function s2l(str)
+  local lizt = {}
+  for i = 1, #str do
+    v = 0
+    if str:sub(i,i)=='1' then v = 1 end
+    lizt[i] = v
+  end
+  return lizt
+end
+    
+
+history_idx = 0
+function updateQ(Q, state, press, reward)
+
+  local s = l2s(state)
+  local a = l2s(press)
+  actions = Q[s] or {}
+  v_ct = actions[a] or {0,0} -- value, count
+  v,ct = unpack(v_ct)
+  -- print("v_ct = ", v_ct, v, ct)
+  actions[a] = {v + reward, ct + 1}
+  Q[s] = actions
+  
+  -- N = 6
+  -- history_idx = history_idx + 1
+  -- history[(history_idx % N) + 1] = {l2s(state), l2s(press), }
+
+  -- idx = 0
+  -- while idx < N do
+  --   h_idx = (history_idx - idx) % N + 1
+  --   sarc = history[h_idx] or nil
+  --   idx = idx + 1
+
+  --   if not (sarc == nil) then
+  --     s,a = unpack(sarc)
+  --     actions = Q[s] or {}
+  --     v_ct = actions[a] or {0,0} -- value, count
+  --     print("v_ct = ", v_ct)
+  --     v,ct = unpack(v_ct)
+  --     actions[a] = {v + reward, ct + 1}
+  --     Q[s] = actions
+  --   end
+  -- end
 end
 
 function updateStrategy()
@@ -261,6 +307,63 @@ function updateStrategy()
     gs[2] = score_current
     gs[3] = global_count
     gstates[height + 1] = gs
+  end
+end
+
+function printQ(Q)
+  -- emu.print("PRINTING Q\n")
+  local total = 0
+  local temp = {}
+  local idx = 1
+  for st, action_dict in pairs(Q) do
+    emu.print("--------------------------------")
+    for act, valcount in pairs(action_dict) do
+      -- print()
+      val, count = unpack(valcount)
+      -- total = total + count
+      -- temp[idx] = (temp[idx] or 0) + count
+      emu.print(st, act, val, count)
+      -- if count>1 then  emu.print(st, act, val, count) end
+    end
+    -- idx = idx + 1
+  end
+  -- emu.print("Total: ", total)
+  -- emu.print("temp", temp)
+end
+
+function takeAction(Q, state)
+  -- ACTION SPACE
+
+  press = maxQAction(Q, state)
+
+  left = make_press({0,0,1,0,0,0,0,0})
+  right = make_press({0,0,0,1,0,0,0,0})
+
+  joypad.set(1, make_press(press_from_bit(press[1])))
+  advanceFrames(5)
+  joypad.set(1, right)
+  advanceFrames(5)
+  -- joypad.set(1, make_press(press_from_bit(press[2])))
+  -- advanceFrames(5)
+  joypad.set(1, right)
+  advanceFrames(5)
+  joypad.set(1, make_press(press_from_bit(press[2])))
+  advanceFrames(5)
+  joypad.set(1, left)
+  advanceFrames(5)
+  -- joypad.set(1, make_press(press_from_bit(press[4])))
+  -- advanceFrames(5)
+  joypad.set(1, left)
+  advanceFrames(5)
+  -- joypad.set(1, make_press(press_from_bit(press[5])))
+  -- advanceFrames(3)
+  return press
+
+end
+
+function advanceFrames(n)
+  for i=1,n do
+    emu.frameadvance()
   end
 end
 
@@ -321,18 +424,32 @@ else -- doeverything
 
 global_count = global_count + 1
 
+if global_count % 15 == 0 then 
+  printQ(Q)
+end
+
 falling = in_waiting
 in_waiting = upcoming
 upcoming = getupcoming()
 toprow = get_grid_toprow()
 -- print(toprow, falling, in_waiting, upcoming)
 
--- pick action from Q
-state = {falling, toprow}
-press = maxQAction(Q, state)
-joypad.set(1, make_press(press))
-emu.frameadvance()
+-- state = {falling, toprow}
+state = {}
+for i=0,3 do
+  for j=0,3 do 
+    b0 = falling[i+1] == toprow[j+1]
+    b1 = falling[i+1] ~= 0 
+    s = 0
+    -- emu.print("b0, b1", b0, b1)
+    if b0 and b1 then s = 1 end
+    state[4*i + j + 1] = s
+  end
+end
 
+-- print("STATE IS ", state)
+
+press = takeAction(Q,state)
 -- observe score/reward and update values
 
 score = getscore()
@@ -346,7 +463,7 @@ if (score_current < score) then
 end
   
 -- ring buffer! only keep track of the 60 most recent
-updateQ(Q)
+updateQ(Q, state, press, reward)
 
 end -- doeverything
 end; -- mainloop

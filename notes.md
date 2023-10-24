@@ -7,6 +7,9 @@
     top/bottom egg are aligned. Top egg should count as bottom egg number!)
 
 
+-[ ] A symmetric situation state [1,1] will produce points no matter which action is taken. The greedy policy breaks this symmetry at random and never repairs it.
+-[ ] The top-egg + bottom-egg combo produces the largest reward but is not identifiable as a function of our state space, so will reward a random action irreparably.
+
 ----------------------------------------------------------------
 
 # Overview
@@ -224,7 +227,6 @@ Q : state -> action -> value
 3. observe the reward
 4. add previous state, action, reward, time to history
 5. for every state action pair in recent history, update value in Q
-
 
 
 # Questions
