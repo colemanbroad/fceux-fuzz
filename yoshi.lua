@@ -2,6 +2,13 @@
 -- yoshi by coleman broaddus
 -- Oct 7 2023
 
+-- 0 empty
+-- 1 Goomba
+-- 2 Piranha Plant
+-- 3 Boo
+-- 4 Blooper
+-- 5 Shell (top)
+-- 6 Shell (bottom)
 
 -- 0440 Mario's Postion. 0 Left, 1 Center, 2 Right
 -- 0532 Egg counter
@@ -218,28 +225,30 @@ end
 
 function maxQAction(Q, state)
 
-  -- emu.print("Q is this! \n", Q)
-
-  actions = Q[l2s(state)] or {}
-  if not actions=={} then
-    emu.print("actions exist!", actions)
-  end
-
-  -- press = random_seq(5)
-  -- ACTION SPACE
   press = random_seq(2)
 
-  if l2s(state)=="0000000000000000" then return press end
+  if l2s(state)=="0000000000000000" then 
+    emu.print("No Matches => Random action.")
+    return press 
+  end
 
+  actions = Q[l2s(state)] or nil
+  if actions==nil then
+    emu.print("No existing action => Random action.")
+    return press
+  end
+
+  emu.print("Action exist!", actions)
   max_val = 0
   for a,vc in pairs(actions) do
       v,c = unpack(vc)
+      emu.print("Action, Value, Count", a,v,c)
       if v > max_val then 
         temp_val = v
         press = s2l(a)
-        emu.print("taking action! ", a, press)
       end
   end
+  emu.print("Best action = ", a, ", i.e. ", press)
   return press
 end
 
@@ -267,6 +276,9 @@ end
 history_idx = 0
 function updateQ(Q, state, press, reward)
 
+  if reward > 0 then
+    emu.print("update Q ", state, press, reward)
+  end
   local s = l2s(state)
   local a = l2s(press)
   actions = Q[s] or {}
@@ -323,7 +335,7 @@ function printQ(Q)
       -- total = total + count
       -- temp[idx] = (temp[idx] or 0) + count
       emu.print(st, act, val, count)
-      -- if count>1 then  emu.print(st, act, val, count) end
+      if count>1 then  emu.print(st, act, val, count) end
     end
     -- idx = idx + 1
   end
@@ -340,24 +352,30 @@ function takeAction(Q, state)
   right = make_press({0,0,0,1,0,0,0,0})
 
   joypad.set(1, make_press(press_from_bit(press[1])))
-  advanceFrames(5)
+  advanceFrames(3)
   joypad.set(1, right)
-  advanceFrames(5)
-  -- joypad.set(1, make_press(press_from_bit(press[2])))
-  -- advanceFrames(5)
-  joypad.set(1, right)
-  advanceFrames(5)
+  advanceFrames(3)
   joypad.set(1, make_press(press_from_bit(press[2])))
-  advanceFrames(5)
+  advanceFrames(3)
   joypad.set(1, left)
-  advanceFrames(5)
-  -- joypad.set(1, make_press(press_from_bit(press[4])))
-  -- advanceFrames(5)
-  joypad.set(1, left)
-  advanceFrames(5)
-  -- joypad.set(1, make_press(press_from_bit(press[5])))
-  -- advanceFrames(3)
+
   return press
+
+  -- -- joypad.set(1, make_press(press_from_bit(press[2])))
+  -- -- advanceFrames(3)
+  -- joypad.set(1, right)
+  -- advanceFrames(3)
+  -- joypad.set(1, make_press(press_from_bit(press[2])))
+  -- advanceFrames(3)
+  -- joypad.set(1, left)
+  -- advanceFrames(3)
+  -- -- joypad.set(1, make_press(press_from_bit(press[4])))
+  -- -- advanceFrames(3)
+  -- joypad.set(1, left)
+  -- advanceFrames(3)
+  -- -- joypad.set(1, make_press(press_from_bit(press[5])))
+  -- -- advanceFrames(3)
+  -- return press
 
 end
 
@@ -422,6 +440,7 @@ if (arrayEqual(upcoming, getupcoming())) then
   emu.frameadvance()
 else -- doeverything
 
+emu.print("---- NEW UPCOMING ----")
 global_count = global_count + 1
 
 if global_count % 15 == 0 then 
@@ -436,33 +455,43 @@ toprow = get_grid_toprow()
 
 -- state = {falling, toprow}
 state = {}
-for i=0,3 do
-  for j=0,3 do 
-    b0 = falling[i+1] == toprow[j+1]
-    b1 = falling[i+1] ~= 0 
+yes_egg = false
+print("fall, top", falling, toprow)
+for i=1,4 do
+  for j=1,4 do 
+    b0 = falling[i] == toprow[j]
+    b1 = falling[i] ~= 0 
     s = 0
     -- emu.print("b0, b1", b0, b1)
     if b0 and b1 then s = 1 end
-    state[4*i + j + 1] = s
+    b2 = falling[i] == 5 -- topegg (never matches with anything!)
+    b3 = toprow[j] == 6
+    if b2 then yes_egg = true end
+    -- if b2 and b3 then s = 3 end
+
+    state[4*(i-1) + j] = s
   end
 end
+if yes_egg then state = {2} end -- ignore all state iff topegg
 
 -- print("STATE IS ", state)
 
+emu.pause()
 press = takeAction(Q,state)
--- observe score/reward and update values
 
+-- observe score/reward and update values
 score = getscore()
+
 -- strategy 
 reward = 0
 if (score_current < score) then
   reward = score - score_current
-  emu.print(reward, score, score_current)
+  emu.print('reward,score,current', reward, score, score_current)
   score_current = score
   updateStrategy()
 end
   
--- ring buffer! only keep track of the 60 most recent
+-- update Q based on observations
 updateQ(Q, state, press, reward)
 
 end -- doeverything

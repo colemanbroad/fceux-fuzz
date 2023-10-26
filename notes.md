@@ -60,8 +60,6 @@ get stuck in an infinite and we can't make progress.
 The more likely failure mode is the rate of progress (rate at which max score is increased),
 slows down over time, and lack of state diversty will probably make this problem worse.
 
-
-
 - _Learn tactics_. Q learning in state+action space that was (toprow + falling + action) = (5^4 * 6^4 * 3) = 2.4 mil.
 Then we have 10frames/sec * 1hr = 36k observations. So the space is still sparse, but we should be able to model it and reduce it.
 We can reduce the environment space by shrinking the `falling` list and the `toprow` list. We can 
