@@ -142,16 +142,17 @@ The value function will not make sense if we only keep track of the `top` and `f
 The rough order of operations involved in a single coarse-grained timestep which may take 8s and 8*60 frames.
 Maybe we could scale up our memory by having a buffer with n memory slots, where slot n is cleared after 2^n frames.
 
-1. new `top` appears in memory
-1. old `top` moves somewhere unknown and begins to fall
+1. new `upcoming` appears in memory at the same time the old falling blocks are 
+1. old `upcoming` moves to a new mem location and begins to fall.
 2. our `action` aligns columns with falling blocks
-3. falling blocks are destined for certain exposed tops because they're too deep
-4. blocks hit the exposed tops
-4. exploding egg animation runs
-5. points are registered 
-5. eggs are registered 
+3. falling blocks are destined for certain exposed tops because they're below the top of some column's blocks.
+4. blocks hit the exposed `tops`
+4. exploding egg animation begins
+4. points are registered 
+4. eggs are registered 
+5. exploding egg animation ends
 6. blocks are redrawn with black borders 
-6. falling blocks are added to the grid and become new exposed tops
+6. falling blocks are added to the grid and become new exposed `tops`
 
 
 policy returns an optimal decision for the given current state
@@ -167,7 +168,7 @@ different yoshi.
 The "action" that we learn to make doesn't necessarily just have to be learning button presses based
 on grid states. it could be learning _any code upstream of button presses_ 
 
-# How long should it take?
+## How long should it take?
 
 If we take one action and observer one reward per second...
 And our state space is `top x falling x actions = 6^4 x 6^4 x 3 = 5_038_848` it will take an hour 
@@ -186,10 +187,11 @@ enough info to take a good action.
         get some points! we should learn this very quickly!
     - we can then extend the action space to X,R,X,R,X,L,X,L,X where `X` is an optional swap and L/R are left/right movements.
         This gives us access to all 4! permutations of columns using a single pass? No it doesn't. We can't do a full iversion of the order, for instance. ABCD -> No it doesn't. We can't do a full iversion of the order, for instance. ABCD -> DCBA.
-- 
 
 
-# A datastructure for Q learning
+
+
+## A datastructure for Q learning
 
 Keep a list of tuples 
 
@@ -238,3 +240,5 @@ Q : state -> action -> value
 7. Calculate probability of loops given n_columns, n_enemy_types, etc..
 8. How should we be sampling new states?
 9. How can we keep track of state trajectories and plot scores over time?
+
+
