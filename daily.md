@@ -107,15 +107,8 @@ In practice waiting for new `upcoming` doesn't seem so bad.
 5. functions to build and execute actions
 
 
-!Todo: instead of just pulling `toprow` as list of gumbas we should look at list of "column descriptors" that include `{toprow:GumbaType, containsEgg:bool, height:[0..8]}`
-
 ```lua
--- show state
-vprint(level, ...)
-printQ(Q)
-
 -- am i dead? respawn
--- convert memory into game state
 get_grid_count()
 get_grid_toprow()
 get_grid_height()
@@ -149,3 +142,65 @@ updateQ(Q, state, press, reward)
 
 main()
 ```
+
+```lua
+
+-- utils
+vprint(level, ...)
+are_arrays_equal(a1, a2)
+
+-- serialize state and action (unique string representation is also a hash)
+l2s(lizt)
+s2l(str)
+
+-- convert memory into game state
+get_grid_count()
+get_grid_toprow()
+get_grid_height()
+get_upcoming()
+get_score()
+am_i_dead()
+
+-- construct actions
+make_press(button_array)
+randompress() 
+random_seq(n)
+press_from_bit(updown)
+
+-- execute actions
+take_action(state, action)
+run_until_action_boundary(state)
+
+-- 
+new_fresh_state()
+load_random_state()
+
+update_state_collection(state)
+update_state(state)
+
+determine_action(Q, state)
+update_Q(Q, state, action, reward)
+
+main()
+```
+
+
+-[ ] instead of just pulling `toprow` as list of gumbas we should look at list of "column descriptors" that include `{toprow:GumbaType, containsEgg:bool, height:[0..8]}`
+
+16 bits of for grid state and 3 bits of action = 19 = less than a million in size! but we only get to try one action / s. This will take > 6 days! 
+The great hope is that the actual distribution over states is low entropy... And I think it is! counts are
+State 2 468 and others were... 56,16,20,4,20,45,7,5,8,2,29,15,31,17,2,32,5,30,8,50,61,20,9,4,7l,438,14,18,16,3,21.
+
+!!! TODO: Don't attempt random actions. Learn to do science! You can rewind to the prior state and try all possible actions! Then you know what's best and can always do that!
+You only need to do this science on states you haven't seen.
+And if we can be more efficient we can expand the state space to include the "column descriptors" above...  
+
+--- I've just refactored every part of the codebase. ---
+
+-[ ] After the refactor I can see that my actions are usually being executed correctly, but not when we have {1,1,x} for all x. The second twiddle is skipped!
+-[ ] The action boundary isn't long enough! Sometimes the matching gumbas don't disappear until after the subsequent action begins.
+
+Nasty bugs.
+-[ ] I have a theory about he diffenent amount of time it takes to perform a twiddle action: Taller towers need longer to move! There top lags behind the bottom.
+-[ ] The state_collection is in trouble. Somehow the deepcopy is failing. The states are aliased and the scores are wrong. 
+

@@ -20,6 +20,22 @@ verbose = 1
 emu.pause()
 
 
+
+function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
 function vprint(level, ...)
   if verbose >= level then
     for i,text in ipairs(arg) do
@@ -94,28 +110,20 @@ function get_score()
   return myscore
 end
 
--- function old_score_extras()
---   score = get_score()
---   position = memory.readbyte(0x0440)
---   n_eggs = memory.readbyte(0x0532)
-
---   gc = get_grid_count()
---   grid_count_score = 10 * (7*4 - gc)^0.5
-
---   grid_height = get_grid_height()
---   if (grid_height < 3) then 
---     print('score 0')
---     return 0 
---   end 
---   -- grid_count_score = -300 end
---   -- if (gc > 20) then grid_count_score = -10 end
-
---   return 100 * n_eggs + score + grid_count_score
--- end
-
-
+function am_i_dead()
+  d = memory.readbyte(0x01E0)
+  -- print("dead", d)
+  if (d == 174 or d == 188) then return true end
+  -- if (memory.readbyte(0x01E0) == 0) then return false end
+  return false
+  -- local r,g,b,p = emu.getscreenpixel(1,1,true)
+  -- if (r==130 and g==211 and b==16) then return true end
+  -- return false
+end
+  
 
 function are_arrays_equal(a1, a2)
+
   -- Check length, or else the loop isn't valid.
   if #a1 ~= #a2 then
     return false
@@ -154,14 +162,6 @@ function make_press(button_array)
   return action
 end
 
-function randompress() 
-  local lra = {3,4,5}
-  local x = lra[math.random(3)]
-  local bs = {0,1,0,0,0,0,0,0}
-  bs[x] = 1
-  return bs
-end
-
 function random_seq(n)
   -- local bs = {0,0,0,0,0}
   local bs = {}
@@ -173,55 +173,59 @@ function random_seq(n)
   return bs
 end
 
-function am_i_dead()
-  d = memory.readbyte(0x01E0)
-  -- print("dead", d)
-  if (d == 174 or d == 188) then return true end
-  -- if (memory.readbyte(0x01E0) == 0) then return false end
-  return false
-  -- local r,g,b,p = emu.getscreenpixel(1,1,true)
-  -- if (r==130 and g==211 and b==16) then return true end
-  -- return false
-end
+
 
 -- sample a new state and refresh 
-function newstate()
-  g_idx = math.random(Nstates)
-  -- restart_count = 0
-  savestate.load(gstates[g_idx][1])
-  score_current = gstates[g_idx][2]
-  score = score_current
-  global_count = gstates[g_idx][3]
-  vprint(2, "Reload game height", g_idx - 1, "with score", score_current)
+function load_random_state()
+
+  for i=0,8 do
+    local s = state_collection[i]
+    emu.print("i=",i," score=", s.state.score)
+  end
+  
+  local height = math.random(0,8)
+  local s = state_collection[height]
+  savestate.load(s.gamestate)
+  -- emu.frameadvance()
+  local state = deepcopy(s.state)
+  vprint(1, "Reload game height", height, "with score", state.score)
+  return state
 end
 
 
-function press_from_bit(updown)
+function press_from_bit(down_button)
   local p = {0,0,0,0,0,0,0,0}
-  if updown == 1 then p[5] = 1 end
+  if down_button == 1 then p[5] = 1 end
   return p
 end
+
+-- exits = {0,0,0,0}
   
-function maxQAction(Q, state)
+function determine_action(Q, state)
 
   local action = random_seq(3)
+  local state_string = l2s(state.m)
 
   -- explore ! with a constant prob
-  if math.random(10) < 2 then return action end
-
-  if l2s(state)=="0000000000000000" then 
-    vprint(2, "All-zero state => Random action.")
+  if math.random(10) < 2 then 
+  --   emu.print("exit 1")
     return action 
   end
 
-  vprint(2, "l2s(state) = ", l2s(state))
-
-  local action_set = Q[l2s(state)] or nil
-  if action_set==nil then
-    vprint(2,"No existing action => Random action.") 
-    return action
+  if state_string=="0000000000000000" then 
+    vprint(2, "All-zero state => Random action.")
+  --   emu.print("exit 2")
+    return action 
   end
 
+  vprint(2, "l2s(state) = ", state_string)
+
+  local action_set = Q[state_string] or nil
+  if action_set==nil then
+    vprint(2,"No existing action => Random action.") 
+  --   emu.print("exit 3")
+    return action
+  end
 
   max_expval = 0
   for a,vc in pairs(action_set) do
@@ -233,11 +237,12 @@ function maxQAction(Q, state)
         action = s2l(a)
       end
   end
-
   
-  vprint(1, "State is:", l2s(state), "count", state_count[l2s(state)], "action", action, "max_expval", max_expval, "------")
+  vprint(2, "State is:", state_string, "count", state_count[state_string], "action", action, "max_expval", max_expval, "------")
   -- vprint(1, "Previous action_set exist in Q!", action_set)
+  -- emu.print("exit 4")
   return action
+
 end
 
 
@@ -260,12 +265,11 @@ function s2l(str)
 end
     
 
-history_idx = 0
-function updateQ(Q, state, press, reward)
+function update_Q(Q, state, action, reward)
 
-  if reward > 0 then vprint(2, "update Q ", state, press, reward) end
-  local s = l2s(state)
-  local a = l2s(press)
+  if reward > 0 then vprint(2, "update Q ", state.m, action, reward) end
+  local s = l2s(state.m)
+  local a = l2s(action)
   local action_set = Q[s] or {}
   v_ct = action_set[a] or {0,0} -- value, count
   v,ct = unpack(v_ct)
@@ -275,211 +279,192 @@ function updateQ(Q, state, press, reward)
 
 end
 
-function updateStrategy()
+
+function update_state_collection(state)
+
   height = get_grid_height()
-  gs = gstates[height + 1]
-  if (score_current > gs[2]) then
-    vprint(2, "New best score", score_current, " for height", height)
-    savestate.save(gs[1])
-    gs[2] = score_current
-    gs[3] = global_count
-    gstates[height + 1] = gs
+  local s = state_collection[height]
+  local best_state = s.state
+  if (state.score > best_state.score) then
+    vprint(1, "New best score", state.score, " for height", height)
+    savestate.save(s.gamestate)
+    s.state = deepcopy(state)
+    state_collection[height] = s
   end
 end
 
 
-function takeAction(Q,state)
-  -- ACTION SPACE
+function take_action(state, action)
 
-  local action = maxQAction(Q, state)
+  -- actions = {1,1,1}
 
   left = make_press({0,0,1,0,0,0,0,0})
   right = make_press({0,0,0,1,0,0,0,0})
   down = make_press({0,1,0,0,0,0,0,0})
 
-  vprint(2, "press : ", action )
+  vprint(2, "action : ", action )
 
-  for n=1,6 do emu.frameadvance() end
+  twiddle_time = {[0] = 0, [1] = 16}
+
+  for n=1,12 do emu.frameadvance() end
 
   joypad.set(1, make_press(press_from_bit(action[1])))
-  for n=1,6 do emu.frameadvance() end
+  t = twiddle_time[action[1]]
+  for n=1,t do emu.frameadvance() end
 
   joypad.set(1, right)
-  for n=1,6 do emu.frameadvance() end
-
+  for n=1,4 do emu.frameadvance() end
 
   joypad.set(1, make_press(press_from_bit(action[2])))
-  for n=1,6 do emu.frameadvance() end
+  t = twiddle_time[action[2]]
+  for n=1,t do emu.frameadvance() end
 
   joypad.set(1, right)
-  for n=1,6 do emu.frameadvance() end
+  for n=1,4 do emu.frameadvance() end
 
   joypad.set(1, make_press(press_from_bit(action[3])))
-  for n=1,6 do emu.frameadvance() end
+  t = twiddle_time[action[3]]
+  for n=1,t do emu.frameadvance() end
 
   joypad.set(1, left)
-  for n=1,6 do emu.frameadvance() end
+  for n=1,4 do emu.frameadvance() end
 
   joypad.set(1, left)
-  for n=1,6 do emu.frameadvance() end
+  for n=1,4 do emu.frameadvance() end
 
-  return action
+  -- Partial state update ?
+  state.upcoming = get_upcoming()
+  state.toprow = get_grid_toprow()
+
+  state = run_until_action_boundary(state)
+  return state
+end
+
+-- Hold the down button until we get a new `upcoming` or until death. These are our action boundaries!
+function run_until_action_boundary(state)
+
+  while (true) do
+
+    if (am_i_dead()) then
+      state = load_random_state()
+      return state
+    end
+
+    test0 = are_arrays_equal(state.upcoming, get_upcoming())
+    -- if (test0 and test1) then
+    -- test1 = are_arrays_equal(state.toprow, get_grid_toprow())
+
+    if (test0) then
+      joypad.set(1, make_press({0,1,0,0,0,0,0,0}))
+      emu.frameadvance()
+      -- emu.print("frame advance ", state.global_count)
+    else 
+      -- emu.print("Action Complete! ", state.global_count)
+      return state
+    end
+
+  end
+ 
+end
+
+function update_state_from_memory(state)
+
+  state.toprow = get_grid_toprow()
+  state.falling = state.in_waiting
+  state.in_waiting = state.upcoming
+  state.upcoming = get_upcoming()
+
+  if verbose >= 2 then 
+    emu.print("upcoming : ", state.upcoming)
+    emu.print("in_waiting : ", state.in_waiting)
+    emu.print("falling : ", state.falling)
+    emu.print("toprow : ", state.toprow)
+    emu.print('pause 1')
+    emu.pause()
+  end
+
+  -- state = {falling, toprow}
+  falling = state.falling
+  toprow = state.toprow
+
+  state.m = {}
+  yes_egg = false
+  for i=1,4 do
+    for j=1,4 do 
+      b0 = falling[i] == toprow[j]
+      b1 = falling[i] ~= 0 
+      s = 0
+      -- emu.print("b0, b1", b0, b1)
+      if b0 and b1 then s = 1 end
+      b2 = falling[i] == 5 -- topegg (never matches with anything!)
+      b3 = toprow[j] == 6
+      if b2 then yes_egg = true end
+      -- if b2 and b3 then s = 3 end
+
+      state.m[4*(i-1) + j] = s
+    end
+  end
+  if yes_egg then state.m = {2} end -- ignore all state iff topegg
+
+  local count = state_count[l2s(state.m)] or 0
+  state_count[l2s(state.m)] = count + 1
+  state.global_count = state.global_count + 1
+
+  vprint(2, "state : ", state.m)
 
 end
 
-function advanceFrames(n)
-  emu.frameadvance()
-  emu.frameadvance()
-  emu.frameadvance()
-  emu.frameadvance()
-  press = {0,1,0,0,0,0,0,0}
-  joypad.set(1, make_press(press))
-  emu.frameadvance()
-  emu.frameadvance()
-  emu.frameadvance()
-  emu.frameadvance()
-  -- for i=2,n do
-  --   emu.frameadvance()
-  -- end
+function new_fresh_state()
+  local state = {}
+  state.score = 0
+  state.global_count = 0
+  state.falling = {0,0,0,0}
+  state.in_waiting = {0,0,0,0}
+  state.upcoming = get_upcoming()
+  -- state.upcoming = {0,0,0,0}
+  state.toprow = get_grid_toprow()
+  -- state.toprow = {0,0,0,0}
+  state.m = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
+  return state
 end
 
--- Initialize the global vars
--- Initialize the global vars
--- Initialize the global vars
--- Initialize the global vars
--- Initialize the global vars
--- Initialize the global vars
 
--- tracks gamestate, score and global count
--- initialize all states to same root
-Nstates = 8
-gstates = {}
-for i=1,Nstates do
-  gstates[i] = {savestate.object(), 0, 0}
-  savestate.save(gstates[i][1])
-end
-
-g_idx = 1
-
-history = {}
-Q = {}
-state_count = {}
-
-falling = {0,0,0,0}
-in_waiting = {0,0,0,0}
-upcoming = {0,0,0,0}
-toprow = {0,0,0,0}
-score_current = 0;
-global_count = 0
--- restart_count = 0
 
 
 function main()
+  local current_state = state_collection[1].state
+  update_state_from_memory(current_state)
 
-while (true) do -- mainloop
+  while (true) do -- mainloop
 
-if (am_i_dead()) then
-  vprint(2, "GAMEOVER")
-  newstate()
-  vprint(2, reward, score, score_current)
-  vprint(2, 'pause 3')
---   emu.pause()
-end
+    local action = determine_action(Q, current_state)
+    emu.print("action = ", action)
+    emu.pause()
+    current_state = take_action(current_state, action)
+    update_state_from_memory(current_state)
+    local newscore = get_score()
+    current_state.score = newscore
+    local reward = newscore - current_state.score
+    update_Q(Q, current_state, action, reward)
+    update_state_collection(current_state)
 
--- Hold the down button if `upcoming` and `toprow` haven't changed.
-test0 = are_arrays_equal(upcoming, get_upcoming())
--- test1 = are_arrays_equal(toprow, get_grid_toprow())
--- if (test0 and test1) then
-if (test0) then
-  press = {0,1,0,0,0,0,0,0}
-  joypad.set(1, make_press(press))
-  emu.frameadvance()
-else -- doeverything
-
-vprint(2,"---- NEW UPCOMING ----")
-global_count = global_count + 1
-
--- if global_count % 15 == 0 then 
---   printQ(Q)
--- end
-
-toprow = get_grid_toprow()
-falling = in_waiting
-in_waiting = upcoming
-upcoming = get_upcoming()
-
-
-if verbose >= 2 then 
-vprint(2, "upcoming : ", upcoming)
-vprint(2, "in_waiting : ", in_waiting)
-vprint(2, "falling : ", falling)
-vprint(2, "toprow : ", toprow)
-
-vprint(2, 'pause 1')
-emu.pause()
-end
-
--- Define and build state 
--- state = {falling, toprow}
-state = {}
-yes_egg = false
-for i=1,4 do
-  for j=1,4 do 
-    b0 = falling[i] == toprow[j]
-    b1 = falling[i] ~= 0 
-    s = 0
-    -- emu.print("b0, b1", b0, b1)
-    if b0 and b1 then s = 1 end
-    b2 = falling[i] == 5 -- topegg (never matches with anything!)
-    b3 = toprow[j] == 6
-    if b2 then yes_egg = true end
-    -- if b2 and b3 then s = 3 end
-
-    state[4*(i-1) + j] = s
-  end
-end
-if yes_egg then state = {2} end -- ignore all state iff topegg
-
-local count = state_count[l2s(state)] or 0
-state_count[l2s(state)] = count + 1
-
-vprint(2, "state : ", state)
-
-press = takeAction(Q,state)
-
--- observe score/reward and update values
-score = get_score()
-
--- strategy 
-reward = 0
-if (score_current < score) then
-  reward = score - score_current
-  vprint(2, 'reward, score, current', reward, score, score_current)
-  score_current = score
-  updateStrategy()
-end
-  
--- update Q based on observations
-updateQ(Q, state, press, reward)
-
-vprint(2, 'pause 2')
--- emu.pause()
-
--- down = make_press({0,1,0,0,0,0,0,0})
--- for n=1,6 do 
---   joypad.set(1, down)
---   emu.frameadvance() 
--- end
-
-upcoming = get_upcoming()
-toprow = get_grid_toprow()
-
--- emu.pause()
-
-end -- doeverything
-end; -- mainloop
-
-
+  end; -- mainloop
 end -- main()
+
+
+-- Initialize the global vars
+
+Nstates = 9 -- one for each height we could reach
+state_collection = {}
+for height = 0, Nstates do
+  local s = {}
+  s.gamestate = savestate.object()
+  savestate.save(s.gamestate)
+  s.state = new_fresh_state()
+  state_collection[height] = s
+end
+
+state_count = {}
+Q = {}
 
 main()
